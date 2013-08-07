@@ -1,0 +1,55 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'English'
+require 'trollop'
+require 'basecamp'
+# require 'ap'
+
+def verbose(string_to_output)
+  puts string_to_output if $verbose
+end
+
+opts = Trollop::options do
+  version "1.0"
+  banner <<-EOS
+  #{File.basename($0)}
+  Description: Grab a list of people in a company stored in basecamp and output in a csv format for freshdesk import.
+
+  Usage:
+  #{File.basename($0)} [options]
+
+  where [options] are:
+  EOS
+  opt :verbose, "Verbose output"
+  opt :company , "Company to export" , :default => "wibble"
+  opt :token_file, "File to read token from ( get your token by selecting My info in base camp ui " , :default => "~/.basecamp/token"
+  opt :domain, "Basecamp domain to use" , :default => "myorg.basecamphq.com"
+end
+$verbose = opts[:verbose]
+
+basecamp_token = IO.read(File.expand_path(opts[:token_file])).chomp
+
+Basecamp.establish_connection!( opts[:domain] , basecamp_token , 'X' , true)
+
+verbose "Company chosen: #{opts[:company]}"
+
+# Work out company id from company name
+companies = Basecamp::Company.find(:all)
+company_id = 0
+companies.each do | company |
+  company_id = company.id if company.name == opts[:company]
+end
+
+verbose "Company id: #{company_id}"
+people = Basecamp::Person.find(:all, :params => {:company_id => company_id })
+
+puts "Name,Email,Title,Company,phone,twitter id"
+
+sorted_people = Array.new
+people.each do | person |
+  if person.phone_number_office.nil? then person.phone_number_office = "office-phone-number" end
+  sorted_people.push "#{person.first_name} #{person.last_name}, #{person.email_address.downcase}, #{person.title}, #{opts[:company]}, #{person.phone_number_office.to_s.gsub("/,|\ |\(|\)|\+/", '')},  "
+end
+
+puts sorted_people.sort.uniq
+
